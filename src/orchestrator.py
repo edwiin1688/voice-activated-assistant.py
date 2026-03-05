@@ -39,11 +39,9 @@ class OrchestratorConfig:
 class Orchestrator:
     def __init__(self, config: Optional[OrchestratorConfig] = None):
         self.config = config or OrchestratorConfig()
-        print("[ORCH] Init start")
 
         self._state = State.STOPPED
         self._state_lock = threading.Lock()
-        print("[ORCH] State lock created")
 
         self._audio_input = AudioInput(
             config=AudioConfig(
@@ -53,7 +51,6 @@ class Orchestrator:
             ),
             callback=self._on_audio_frame,
         )
-        print("[ORCH] AudioInput created")
 
         self._vad = VADSegmenter(
             config=VADConfig(
@@ -65,21 +62,14 @@ class Orchestrator:
             ),
             on_utterance=self._on_utterance,
         )
-        print("[ORCH] VADSegmenter created")
 
         self._asr = ASRWorker(on_result=self._on_asr_result)
-        print("[ORCH] ASRWorker created")
-
         self._rule_engine = RuleEngine(rules_path=self.config.rules_path)
-        print("[ORCH] RuleEngine created")
-
         self._tts = TTSWorker(on_complete=self._on_tts_complete)
-        print("[ORCH] TTSWorker created")
 
         self._speaking_event = self._tts.speaking_event
 
         self._is_running = False
-        print("[ORCH] Init complete")
 
     @property
     def state(self) -> State:
