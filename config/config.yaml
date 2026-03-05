@@ -1,0 +1,17 @@
+audio:
+  sample_rate: 16000
+  frame_duration_ms: 30
+  channels: 1
+
+vad:
+  silence_threshold: 0.5
+  silence_duration: 1.0
+  min_utterance_ms: 300
+  max_utterance_s: 15
+
+orchestrator:
+  resume_grace_s: 0.2
+
+logging:
+  level: INFO
+  debug: false
