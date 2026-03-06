@@ -110,6 +110,15 @@ python src/main.py --rules config/rules.json
 # 指定音訊設備
 python src/main.py --rules config/rules.json --device 0
 
+# 指定運算裝置 (CPU 或 GPU)
+python src/main.py --device-type cuda  # 強制 GPU
+python src/main.py --device-type cpu   # 強制 CPU
+
+# 切換語音人聲 (預設 vivian)
+python src/main.py --voice serena      # 切換為塞雷娜 (女聲)
+python src/main.py --voice ryan        # 切換為瑞恩 (男聲)
+python src/main.py --voice uncle_fu    # 切換為傅大叔 (特色聲)
+
 # Mock 測試模式（不需要麥克風）
 python src/main.py --mock-mode --test "天氣"
 ```

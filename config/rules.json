@@ -2,7 +2,14 @@
   "rules": [
     {
       "id": "greeting",
-      "keywords": ["你好", "hello", "hi", "嗨", "好", "哈囉"],
+      "keywords": [
+        "你好",
+        "hello",
+        "hi",
+        "嗨",
+        "好",
+        "哈囉"
+      ],
       "match_mode": "contains",
       "priority": 1,
       "cooldown_s": 2.0,
@@ -11,13 +18,15 @@
         "text_template": "你好，我是語音助理"
       },
       "tts": {
-        "voice": "female",
         "language": "zh-CN"
       }
     },
     {
       "id": "weather",
-      "keywords": ["天氣", "weather"],
+      "keywords": [
+        "天氣",
+        "weather"
+      ],
       "match_mode": "contains",
       "priority": 10,
       "cooldown_s": 5.0,
@@ -26,13 +35,16 @@
         "text_template": "今天天氣晴朗，溫度適中"
       },
       "tts": {
-        "voice": "female",
         "language": "zh-CN"
       }
     },
     {
       "id": "time",
-      "keywords": ["時間", "幾點", "time"],
+      "keywords": [
+        "時間",
+        "幾點",
+        "time"
+      ],
       "match_mode": "contains",
       "priority": 20,
       "cooldown_s": 3.0,
@@ -41,13 +53,16 @@
         "text_template": "現在時間是下午三點"
       },
       "tts": {
-        "voice": "female",
         "language": "zh-CN"
       }
     },
     {
       "id": "help",
-      "keywords": ["幫助", "help", "救命"],
+      "keywords": [
+        "幫助",
+        "help",
+        "救命"
+      ],
       "match_mode": "contains",
       "priority": 5,
       "cooldown_s": 10.0,

@@ -18,7 +18,10 @@ import threading
 import queue
 import time
 import subprocess
-from typing import Optional, Callable
+import torch
+import numpy as np
+import sounddevice as sd
+from typing import Optional, Callable, Dict, Any
 from dataclasses import dataclass
 from .rule_engine import TTSJob
 
@@ -91,6 +94,9 @@ class TTSWorker:
         self,
         model_path: Optional[str] = None,
         on_complete: Optional[Callable[[TTSResult], None]] = None,
+        device: Optional[int] = None,
+        device_type: str = "auto",
+        default_voice: str = "vivian"
     ):
         """
         建構函式 - 建立 TTSWorker 實例
@@ -115,6 +121,9 @@ class TTSWorker:
         """
         self.model_path = model_path
         self.on_complete = on_complete
+        self.device = device
+        self.device_type = device_type
+        self.default_voice = default_voice
 
         # 建立任務佇列
         self._job_queue: queue.Queue = queue.Queue()
@@ -168,42 +177,55 @@ class TTSWorker:
         return self._speaking_event
 
     def load_model(self):
-        """
-        初始化 TTS 引擎
+        print(f"[TTS] 載入 Qwen3-TTS 模型自: {self.model_path}...")
+        try:
+            import torch
+            from qwen_tts import Qwen3TTSModel
 
-        說明：
-            目前的實作使用 espeak-ng (系統命令)，無需額外模型載入。
-            此函式預留給其他 TTS 引擎使用。
+            # 設定裝置與資料型別
+            if self.device_type == "auto":
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            else:
+                device = self.device_type
+            
+            # 針對 Ampere (30系列) 以上顯卡啟用 TF32 加速
+            if torch.cuda.is_available():
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
 
-        參數：
-            無
+            # 使用 bfloat16 以符合 Qwen3 原生型別效能與穩定性 (針對 RTX 30+ 最佳化)
+            torch_dtype = torch.bfloat16 if "cuda" in device else torch.float32
+            
+            print(f"[TTS] 準備載入 Qwen3-TTS 模型 (DType: {torch_dtype}, 裝置: {device})...", flush=True)
 
-        回傳：
-            無
-        """
+            # 載入 Qwen3-TTS 模型
+            self._engine = Qwen3TTSModel.from_pretrained(
+                self.model_path, 
+                device_map=device,
+                dtype=torch_dtype,
+                attn_implementation="sdpa",
+                trust_remote_code=True
+            )
+            
+            # 強制檢查設備屬性
+            actual_device = next(self._engine.model.parameters()).device
+            print(f"[TTS] 模型載入完畢 | 物理裝置: {actual_device} | 型別: {next(self._engine.model.parameters()).dtype}")
+        except Exception as e:
+            print(f"[TTS] 模型載入失敗: {e}, 將使用系統預設 TTS 作為備援")
+            self._load_fallback_engine()
+    
+    def _load_fallback_engine(self):
+        """載入系統內建的 TTS 引擎作為備援"""
         import platform
-
         system = platform.system()
-
         if system == "Windows":
             try:
                 import pyttsx3
-
-                self._engine = pyttsx3.init()
-                self._engine.setProperty("rate", 150)
-                self._engine.setProperty("volume", 0.9)
-                voices = self._engine.getProperty("voices")
-                for voice in voices:
-                    if "chinese" in voice.name.lower() or "zh" in voice.id.lower():
-                        self._engine.setProperty("voice", voice.id)
-                        break
-                print("[TTS] Using pyttsx3 (Windows) - Chinese voice enabled")
-            except Exception as e:
-                print(f"[TTS] pyttsx3 init failed: {e}, falling back to espeak-ng")
-                self._engine = None
+                self._fallback_engine = pyttsx3.init()
+            except ImportError:
+                self._fallback_engine = None
         else:
-            print("[TTS] Using espeak-ng for speech synthesis")
-            self._engine = None
+            self._fallback_engine = None
 
     def start(self):
         """
@@ -270,6 +292,7 @@ class TTSWorker:
             return False
 
         # 加入任務佇列
+        print(f"[TTS] 提交朗讀任務到佇列: 「{job.text}」", flush=True)
         self._job_queue.put(job)
         return True
 
@@ -287,10 +310,11 @@ class TTSWorker:
         參數：
             無
         """
+        print("[TTS] Worker 執行緒已啟動", flush=True)
         while self._is_running:
             try:
-                # 從佇列取出任務 (最多等待 0.1 秒)
-                job = self._job_queue.get(timeout=0.1)
+                # 從佇列取出任務 (最多等待 1.0 秒)
+                job = self._job_queue.get(timeout=1.0)
 
                 # 收到結束訊號
                 if job is None:
@@ -310,28 +334,7 @@ class TTSWorker:
                 print(f"[TTS] Error: {e}")
 
     def _speak(self, job: TTSJob):
-        """
-        執行文字朗讀
-
-        說明：
-            使用 espeak-ng 將文字轉換為語音並播放。
-            流程：
-            1. 設定說話狀態 (設定 speaking_event)
-            2. 記錄開始時間
-            3. 執行 espeak-ng 命令
-            4. 計算耗時
-            5. 建立 TTSResult
-            6. 呼叫 on_complete 回調
-            7. 清除說話狀態
-
-        參數：
-            job: TTSJob，要朗讀的任務
-
-        espeak-ng 參數說明：
-            -v zh: 使用中文聲音
-            -s 140: 語速 140 WPM (每分鐘字數)
-            job.text: 要朗讀的文字
-        """
+        print(f"[TTS] 開始處理朗讀任務: 「{job.text}」", flush=True)
         # 設定說話狀態
         self._is_speaking = True
         self._speaking_event.set()
@@ -339,39 +342,76 @@ class TTSWorker:
         # 記錄開始時間
         start_time = time.time()
 
-        # 根據平台選擇 TTS 引擎
-        if self._engine is not None:
-            # Windows: 使用 pyttsx3
-            try:
-                self._engine.say(job.text)
-                self._engine.runAndWait()
-            except Exception as e:
-                print(f"[TTS] pyttsx3 error: {e}")
-        else:
-            # Linux/macOS: 使用 espeak-ng
-            try:
-                subprocess.run(
-                    ["espeak-ng", "-v", "zh", "-s", "140", job.text],
-                    capture_output=True,
-                    timeout=10,
-                )
-            except FileNotFoundError:
-                print("[TTS] espeak not found, skipping audio output")
-            except Exception as e:
-                print(f"[TTS] Speak error: {e}")
+        # 執行文字朗讀
+        try:
+            import sounddevice as sd
+            import numpy as np
+
+            # 使用 Qwen3-TTS 生成音訊 (CustomVoice 實作)
+            # 說明：對於 CustomVoice 模型使用 generate_custom_voice
+            #       回傳結果為 (List[np.ndarray], sr)
+            if hasattr(self._engine, 'generate_custom_voice'):
+                # 決定要使用的說話者
+                speaker = job.voice or self.default_voice
+                print(f"[TTS] 使用語音人聲: {repr(speaker)}", flush=True)
+                
+                # AI 生成階段計時 - 進入推論模式優化效能
+                with torch.inference_mode():
+                    if torch.cuda.is_available():
+                        torch.cuda.synchronize()
+                    gen_start = time.time()
+                    
+                    wavs, sr = self._engine.generate_custom_voice(
+                        job.text, 
+                        speaker=speaker,
+                        do_sample=False, # 禁用隨機採樣以加速
+                        max_new_tokens=512 # 語音任務不需過長 tokens
+                    )
+                    
+                    if torch.cuda.is_available():
+                        torch.cuda.synchronize()
+                    gen_end = time.time()
+                
+                audio_data = wavs[0] # 取得第一段生成的音訊
+                audio_duration_s = len(audio_data) / sr
+                
+                # 輸出音訊統計資訊以便除錯
+                max_val = np.abs(audio_data).max()
+                print(f"[TTS] AI 生成完成 | 耗時: {int((gen_end - gen_start) * 1000)}ms | 音訊長度: {audio_duration_s:.2f}s | 最大振幅: {max_val:.4f}", flush=True)
+                
+                # 播放階段
+                sd.play(audio_data, sr, device=self.device)
+                sd.wait()
+            else:
+                self._speak_fallback(job)
+
+        except Exception as e:
+            print(f"[TTS] Qwen3-TTS 播放錯誤: {e}, 嘗試備援...")
+            self._speak_fallback(job)
 
         # 計算耗時
         duration_ms = int((time.time() - start_time) * 1000)
-        print(f"[TTS] 播放完成，耗時: {duration_ms}ms")
-
+        
         # 建立結果物件
         result = TTSResult(job_id=job.rule_id, success=True, duration_ms=duration_ms)
 
-        # 清除說話狀態（在回調之前）
+        # 清除說話狀態
         self._is_speaking = False
         self._speaking_event.clear()
 
         # 呼叫完成回調
         if self.on_complete:
             self.on_complete(result)
-        self._speaking_event.clear()
+
+    def _speak_fallback(self, job: TTSJob):
+        """備援的朗讀實作"""
+        if hasattr(self, '_fallback_engine') and self._fallback_engine:
+             self._fallback_engine.say(job.text)
+             self._fallback_engine.runAndWait()
+        else:
+            # 最後一線：使用系統指令
+            import subprocess
+            try:
+                subprocess.run(["espeak-ng", "-v", "zh", job.text], capture_output=True)
+            except:
+                print(f"[TTS] 無法播放語音: {job.text}")

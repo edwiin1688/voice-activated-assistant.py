@@ -92,6 +92,20 @@ def parse_args():
         type=str, 
         help="Test with a specific phrase (implies --mock-mode)"
     )
+    parser.add_argument(
+        "--device-type",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda"],
+        help="Device to run models on (auto, cpu, cuda)"
+    )
+    parser.add_argument(
+        "--voice",
+        type=str,
+        default="vivian",
+        choices=["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"],
+        help="TTS speaker voice"
+    )
     
     return parser.parse_args()
 
@@ -148,6 +162,8 @@ def main():
         audio_device=args.device,       # 音訊裝置索引
         # 若有 --test 參數或 --mock-mode，則啟用模擬模式
         mock_mode=args.mock_mode or args.test is not None,
+        device=args.device_type,
+        tts_voice=args.voice,
     )
 
     # Step 5: 建立 Orchestrator 協調器實例
@@ -184,6 +200,7 @@ def main():
         print("Mode: MOCK (no audio input)")
     elif args.device is not None:
         print(f"Using audio device: {args.device}")
+    print(f"TTS Voice: {args.voice}")
     print("Press Ctrl+C to stop")
 
     # Step 8: 啟動 Orchestrator 協調器

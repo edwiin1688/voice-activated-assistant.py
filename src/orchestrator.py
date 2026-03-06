@@ -87,7 +87,7 @@ class OrchestratorConfig:
     sample_rate: int = 16000
     frame_duration_ms: int = 30
     silence_threshold: float = 0.5
-    silence_duration: float = 1.5
+    silence_duration: float = 1.0
     min_utterance_ms: int = 300
     max_utterance_s: int = 15
     resume_grace_s: float = 0.2
@@ -95,6 +95,10 @@ class OrchestratorConfig:
     debug: bool = False
     audio_device: Optional[int] = None
     mock_mode: bool = False
+    asr_model_path: str = "models/Qwen3-ASR-0.6B"
+    tts_model_path: str = "models/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+    device: str = "auto"  # "auto", "cpu", or "cuda"
+    tts_voice: str = "vivian"
 
 
 # ==============================================================================
@@ -167,13 +171,23 @@ class Orchestrator:
 
         # 建立各 Worker 實例
         # ASR: 語音辨識 Worker
-        self._asr = ASRWorker(on_result=self._on_asr_result)
+        self._asr = ASRWorker(
+            model_path=self.config.asr_model_path, 
+            on_result=self._on_asr_result,
+            device=self.config.device
+        )
 
         # RuleEngine: 規則引擎，載入 rules.json 檔案
         self._rule_engine = RuleEngine(rules_path=self.config.rules_path)
 
         # TTS: 文字轉語音 Worker
-        self._tts = TTSWorker(on_complete=self._on_tts_complete)
+        self._tts = TTSWorker(
+            model_path=self.config.tts_model_path,
+            on_complete=self._on_tts_complete,
+            device=self.config.audio_device,
+            device_type=self.config.device,
+            default_voice=self.config.tts_voice
+        )
 
         # 取得 TTS 的 speaking Event，用於打斷式對話
         self._speaking_event = self._tts.speaking_event
@@ -274,6 +288,12 @@ class Orchestrator:
             print("[協調器] 模擬模式執行中 - 無需音訊輸入")
             self.set_state(State.LISTENING)
             self._is_running = True
+            # 模型熱身 (Warm-up)
+            # 說明：首輪推論通常較慢 (CUDA 初始化)，預先跑一次可加速後續互動
+            print("[系統] 正在熱身 AI 模型以提升反應速度...", flush=True)
+            self._warm_up()
+            
+            # 啟動後打聲招呼
             print("[狀態] -> 監聽中 (等待語音輸入...)")
             return True
 
@@ -282,11 +302,49 @@ class Orchestrator:
             print("[協調器] 音訊輸入啟動失敗")
             return False
 
+        # 模型熱身 (Warm-up)
+        # 說明：首輪推論通常較慢 (CUDA 初始化)，預先跑一次可加速後續互動
+        # 模型熱身 (Warm-up)
+        # 說明：首輪推論通常較慢 (CUDA 初始化)，預先跑一次可加速後續互動
+        print("[系統] 正在熱身 AI 模型以提升反應速度...", flush=True)
+        self._warm_up()
+        
         # Step 6: 設定狀態為 LISTENING，開始監聽
         self.set_state(State.LISTENING)
-        print("[狀態] -> 監聽中 (等待語音輸入...)")
         self._is_running = True
+        print("[系統] 語音助理已就緒！")
+        print("[狀態] -> 監聽中 (等待語音輸入...)")
+
+        # 新增：啟動成功後用語音打招呼
+        print("[系統] 傳送啟動招呼語...")
+        self._tts.speak(TTSJob(
+            rule_id="system_startup",
+            text="系統已啟動，你好！我有什麼可以幫你的嗎？"
+        ))
+
         return True
+
+    def _warm_up(self):
+        """
+        AI 模型熱身
+        透過執行一次隱藏推論來初始化 CUDA 快取與相關運算資源
+        """
+        self._tts.speak(TTSJob(
+            rule_id="warmup",
+            text="你好",
+            voice=self.config.tts_voice
+        ))
+        
+        # 等待熱身結束 (最多等待 20 秒)
+        start_wait = time.time()
+        # 先等它開始 (event 被 set)
+        while not self._speaking_event.is_set() and time.time() - start_wait < 5:
+            time.sleep(0.1)
+        # 再等它結束 (event 被 clear)
+        while self._speaking_event.is_set() and time.time() - start_wait < 20:
+            time.sleep(0.1)
+        
+        print("[系統] 模型熱身完成。")
 
     def stop(self):
         """

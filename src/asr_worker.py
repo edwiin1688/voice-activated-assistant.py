@@ -94,8 +94,9 @@ class ASRWorker:
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
+        model_path: str = "models/Qwen3-ASR-0.6B",
         on_result: Optional[Callable[[ASRResult], None]] = None,
+        device: str = "auto"
     ):
         """
         建構函式 - 建立 ASRWorker 實例
@@ -120,6 +121,7 @@ class ASRWorker:
         """
         self.model_path = model_path
         self.on_result = on_result
+        self.device_type = device
 
         # 建立任務佇列，容量無上限
         # 說明：使用 queue.Queue 實現執行緒安全的任務傳遞
@@ -138,18 +140,31 @@ class ASRWorker:
         self._whisper_model = None
 
     def load_model(self):
-        print("[ASR] 載入 Faster-Whisper 模型...")
+        print(f"[ASR] 載入 Qwen3-ASR 模型自: {self.model_path}...")
         try:
-            from faster_whisper import WhisperModel
+            import torch
+            from qwen_asr import Qwen3ASRModel
 
-            model_size = "base"
-            print(f"[ASR] 下載模型: faster-whisper-{model_size} (約 140MB)")
+            # 設定裝置與資料型別
+            if self.device_type == "auto":
+                device = "cuda:0" if torch.cuda.is_available() else "cpu"
+            else:
+                device = self.device_type
+            
+            torch_dtype = torch.bfloat16 if "cuda" in device else torch.float32
 
-            self._whisper_model = WhisperModel(
-                model_size, device="cpu", compute_type="int8"
+            # 使用官方 Qwen3ASRModel 載入模型
+            # 說明：使用 sdpa 加速 Attention
+            self._model = Qwen3ASRModel.from_pretrained(
+                self.model_path,
+                dtype=torch_dtype,
+                device_map=device,
+                attn_implementation="sdpa",
+                trust_remote_code=True
             )
+
             self._model_loaded = True
-            print("[ASR] 模型載入成功！")
+            print(f"[ASR] 模型載入成功！(使用裝置: {device})")
         except Exception as e:
             print(f"[ASR] 模型載入失敗: {e}")
             self._model_loaded = False
@@ -299,30 +314,24 @@ class ASRWorker:
         TODO：
             實作 Faster-Whisper 推論邏輯
         """
-        # 檢查模型是否已載入
-        if not self._model_loaded:
-            return ASRResult(transcript="[ASR model not loaded]")
-
-        # 執行 ASR 推論
+        # 執行 ASR 推論 (Qwen3-ASR 官方函式庫實作)
         try:
-            import numpy as np
-
-            # 確保音訊是正確的格式
-            if not isinstance(audio, np.ndarray):
-                return ASRResult(transcript="[ASR 音訊格式錯誤]")
-
-            # 使用 faster-whisper
-            import tempfile
-            import soundfile as sf
-
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                sf.write(tmp.name, audio, 16000)
-                segments, info = self._whisper_model.transcribe(
-                    tmp.name, language="zh", beam_size=5
-                )
-                transcript = "".join([seg.text for seg in segments]).strip()
-
-            return ASRResult(transcript=transcript)
+            start_time = time.time()
+            # 使用官方的 transcribe 方法
+            # 說明：audio 需要傳入 (np.ndarray, sr) 元組
+            results = self._model.transcribe(
+                audio=(audio, 16000),
+                language=None, # 自動偵測語言
+            )
+            duration_ms = int((time.time() - start_time) * 1000)
+            
+            if results and len(results) > 0:
+                transcript = results[0].text.strip()
+                print(f"[ASR] 辨識完成 | 耗時: {duration_ms}ms | 文字: 「{transcript}」", flush=True)
+                return ASRResult(transcript=transcript)
+            else:
+                print(f"[ASR] 辨識完成 | 耗時: {duration_ms}ms | 文字: 「」", flush=True)
+                return ASRResult(transcript="")
 
         except Exception as e:
             print(f"[ASR] 推論錯誤: {e}")

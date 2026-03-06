@@ -60,7 +60,7 @@ class VADConfig:
     """
 
     silence_threshold: float = 0.5
-    min_silence_duration: float = 1.5
+    min_silence_duration: float = 1.0
     min_utterance_ms: int = 300
     max_utterance_s: int = 15
     sample_rate: int = 16000
@@ -270,8 +270,8 @@ class VADSegmenter:
                     # 正在說話中遇到靜音，累積靜音時間
                     self._silence_duration += len(audio) / self.config.sample_rate
 
-                    # 檢查是否應該結束語句
-                    if self._silence_duration >= self.config.silence_threshold:
+                    # 檢查是否應該結束語句 (使用時間閾值而非機率閾值)
+                    if self._silence_duration >= self.config.min_silence_duration:
                         print(
                             f"[VAD] Silence for {self._silence_duration:.1f}s - finalizing..."
                         )
