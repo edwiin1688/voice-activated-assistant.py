@@ -84,19 +84,16 @@ class Orchestrator:
         if self._is_running:
             return False
 
-        print("[ORCHESTRATOR] Loading rules...")
         self._rule_engine.load_rules()
-        print("[ORCHESTRATOR] Loading VAD...")
-        self._vad.load_vad()
 
-        print("[ORCHESTRATOR] Starting ASR...")
+        if not self.config.mock_mode:
+            self._vad.load_vad()
+
         self._asr.load_model()
         self._asr.start()
 
-        print("[ORCHESTRATOR] Starting TTS...")
         self._tts.load_model()
         self._tts.start()
-        print("[ORCHESTRATOR] All threads started")
 
         if self.config.mock_mode:
             print("[ORCHESTRATOR] Running in MOCK mode - no audio input required")

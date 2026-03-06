@@ -54,6 +54,8 @@ class VADSegmenter:
             self._vad_loaded = True
         except ImportError:
             self._vad_loaded = False
+        except Exception:
+            self._vad_loaded = False
 
     def process_frame(self, audio: np.ndarray) -> bool:
         current_time = time.time()
