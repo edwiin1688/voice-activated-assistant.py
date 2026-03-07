@@ -103,8 +103,8 @@ def parse_args():
         "--voice",
         type=str,
         default="vivian",
-        choices=["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"],
-        help="TTS speaker voice"
+        choices=["random", "serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"],
+        help="TTS speaker voice (select 'random' for random voice at startup)"
     )
     
     # -------------------------------------------------------------------------
@@ -165,6 +165,14 @@ def main():
     """
     # Step 1: 解析命令列參數
     args = parse_args()
+
+    # 處理隨機聲音邏輯
+    if args.voice == "random":
+        import random
+        # 排除 'random' 本身
+        voices = ["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"]
+        args.voice = random.choice(voices)
+        print(f"[系統] 隨機選擇啟動語音: {args.voice}")
 
     # Step 2: 檢查是否需要列出可用音訊裝置
     if args.list_devices:

@@ -20,6 +20,13 @@ from typing import Optional, Callable
 from dataclasses import dataclass
 import numpy as np
 
+try:
+    from opencc import OpenCC
+    # s2t: Simplified Chinese to Traditional Chinese
+    cc = OpenCC('s2t')
+except ImportError:
+    cc = None
+
 
 # ==============================================================================
 # ASR 結果資料類別 (ASRResult)
@@ -327,6 +334,11 @@ class ASRWorker:
             
             if results and len(results) > 0:
                 transcript = results[0].text.strip()
+                
+                # 自動轉換為繁體中文
+                if cc and transcript:
+                    transcript = cc.convert(transcript)
+                    
                 print(f"[ASR] 辨識完成 | 耗時: {duration_ms}ms | 文字: 「{transcript}」", flush=True)
                 return ASRResult(transcript=transcript)
             else:
