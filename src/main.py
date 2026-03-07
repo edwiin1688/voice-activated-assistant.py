@@ -103,7 +103,7 @@ def parse_args():
         "--voice",
         type=str,
         default="vivian",
-        choices=["random", "serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"],
+        choices=["random", "serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee"],
         help="TTS speaker voice (select 'random' for random voice at startup)"
     )
     
@@ -169,8 +169,8 @@ def main():
     # 處理隨機聲音邏輯
     if args.voice == "random":
         import random
-        # 排除 'random' 本身
-        voices = ["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee", "eric", "dylan"]
+        # 排除 'random' 本身，並移除帶有強烈方言口音的角色 (eric: 四川, dylan: 北京)
+        voices = ["serena", "vivian", "uncle_fu", "ryan", "aiden", "ono_anna", "sohee"]
         args.voice = random.choice(voices)
         print(f"[系統] 隨機選擇啟動語音: {args.voice}")
 

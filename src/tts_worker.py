@@ -25,6 +25,13 @@ from typing import Optional, Callable, Dict, Any
 from dataclasses import dataclass
 from .rule_engine import TTSJob
 
+try:
+    from opencc import OpenCC
+    # t2s: Traditional Chinese to Simplified Chinese
+    cc_tts = OpenCC('t2s')
+except ImportError:
+    cc_tts = None
+
 
 # ==============================================================================
 # TTS 結果資料類別 (TTSResult)
@@ -348,8 +355,13 @@ class TTSWorker:
         self._speaking_event.set()
         start_time = time.time()
 
+        # 為了避免 Qwen3-TTS 唸繁體中文時產生粵語/港澳口音，在此將文字偷偷轉換為簡體給模型
+        text_to_speak = job.text
+        if cc_tts:
+            text_to_speak = cc_tts.convert(text_to_speak)
+
         # 1. 拆分句子
-        sentences = self._split_into_sentences(job.text)
+        sentences = self._split_into_sentences(text_to_speak)
         print(f"[TTS] 偵測到 {len(sentences)} 個語句段落，進入串流模式...", flush=True)
 
         # 2. 建立播放佇列與播放執行緒 (本任務專用)

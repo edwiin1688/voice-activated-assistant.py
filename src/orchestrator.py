@@ -304,8 +304,6 @@ class Orchestrator:
 
         # 模型熱身 (Warm-up)
         # 說明：首輪推論通常較慢 (CUDA 初始化)，預先跑一次可加速後續互動
-        # 模型熱身 (Warm-up)
-        # 說明：首輪推論通常較慢 (CUDA 初始化)，預先跑一次可加速後續互動
         print("[系統] 正在熱身 AI 模型以提升反應速度...", flush=True)
         self._warm_up()
         
@@ -331,20 +329,25 @@ class Orchestrator:
         """
         self._tts.speak(TTSJob(
             rule_id="warmup",
-            text="你好",
+            text="正在熱身",
             voice=self.config.tts_voice
         ))
         
-        # 等待熱身結束 (最多等待 20 秒)
+        # 等待熱身結束 (最多等待 25 秒)
         start_wait = time.time()
+        import sys
+        print("[系統] 模型熱身進行中 ", end="", flush=True)
+
         # 先等它開始 (event 被 set)
         while not self._speaking_event.is_set() and time.time() - start_wait < 5:
-            time.sleep(0.1)
+            time.sleep(0.5)
+            print(".", end="", flush=True)
         # 再等它結束 (event 被 clear)
-        while self._speaking_event.is_set() and time.time() - start_wait < 20:
-            time.sleep(0.1)
+        while self._speaking_event.is_set() and time.time() - start_wait < 25:
+            time.sleep(0.5)
+            print(".", end="", flush=True)
         
-        print("[系統] 模型熱身完成。")
+        print("\n[系統] 模型熱身完成。")
 
     def stop(self):
         """

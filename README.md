@@ -13,8 +13,9 @@
 ## ✨ 核心特性
 
 - **🚀 極速本地推論**：使用 Qwen3-ASR 與 Qwen3-TTS，支援串流輸出，具備極低首包延遲。
+- **🗣️ 純淨自然發音**：內建 OpenCC 簡繁轉換機制，避免 TTS 模型朗讀繁體中文時產生混淆（如自動切換為粵語口音），確保發音皆為標準的國語/普通話。同時排除帶有強烈方言口音的角色，保障溝通無礙。
 - **🤫 隱私與安全**：語音轉文字 (ASR) 結果僅暫存於記憶體 (RAM)，程式結束後自動釋放，不留任何磁碟紀錄。
-- **🧠 智慧停頓偵測 (VAD)**：內建 1.0 秒連續靜音判斷，精準識別一段話的結束點。
+- **🧠 智慧停頓偵測 (VAD)**：內建 0.8 秒連續靜音判斷，精準識別一段話的結束點。
 - **🚦 狀態機協調**：當 TTS 播放時自動暫停 ASR 監聽，完美解決「自己聽到自己講話」的自我回饋問題。
 - **🛠️ JSON 驅動規則**：透過簡單的 JSON 設定檔定義關鍵字、優先序與多樣化的回覆模式。
 
@@ -115,9 +116,11 @@ python src/main.py --device-type cuda  # 強制 GPU
 python src/main.py --device-type cpu   # 強制 CPU
 
 # 切換語音人聲 (預設 vivian)
+python src/main.py --voice random      # 啟動時隨機抽取一個聲音
 python src/main.py --voice serena      # 切換為塞雷娜 (女聲)
 python src/main.py --voice ryan        # 切換為瑞恩 (男聲)
 python src/main.py --voice uncle_fu    # 切換為傅大叔 (特色聲)
+# 註：為確保發音標準，已主動隱藏帶有四川與北京口音的方言角色。
 
 # Mock 測試模式（不需要麥克風）
 python src/main.py --mock-mode --test "天氣"
